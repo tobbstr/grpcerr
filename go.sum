@@ -38,6 +38,8 @@ github.com/tobbstr/testa v0.0.0-20210629211400-3b439f1d3634 h1:UIHLOS5iPgCEKGkKj
 github.com/tobbstr/testa v0.0.0-20210629211400-3b439f1d3634/go.mod h1:18r0n0M5jytijn4aewqDI7AgD56agM6GXs4bbOCSVbU=
 github.com/tobbstr/testa v0.0.0-20210713092458-cad8a02823bf h1:TS7HVIwBAbzwVAoBbfbIX6B6+VdHZd4LvuOmA4bEPfM=
 github.com/tobbstr/testa v0.0.0-20210713092458-cad8a02823bf/go.mod h1:18r0n0M5jytijn4aewqDI7AgD56agM6GXs4bbOCSVbU=
+github.com/tobbstr/testa v0.0.0-20210713193007-b38402aad780 h1:yfWgaBDf+ir2dKuou/ts/294C9EY1fW37x8gcHiIqU0=
+github.com/tobbstr/testa v0.0.0-20210713193007-b38402aad780/go.mod h1:18r0n0M5jytijn4aewqDI7AgD56agM6GXs4bbOCSVbU=
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
