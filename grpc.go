@@ -1,9 +1,6 @@
 package grpcerr
 
 import (
-	"fmt"
-	"net/http"
-
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -29,79 +26,6 @@ const (
 	defaultUnavailableErrMsg        = "Service unavailable. Typically the server is down."
 	defaultDeadlineExceededErrMsg   = "Request deadline exceeded. This will happen only if the caller sets a deadline that is shorter than the method's default deadline (i.e. requested deadline is not enough for the server to process the request) and the request did not finish within the deadline."
 )
-
-type httpResponseFormatter struct {
-	st   *status.Status
-	w    http.ResponseWriter
-	opts []ResponseWriterOption
-}
-
-func (f *httpResponseFormatter) AsJSON() error {
-	if f.st == nil {
-		return fmt.Errorf("invalid argument: status was nil")
-	}
-	json, err := jsonBytesFromGrpcStatus(f.st)
-	if err != nil {
-		fmt.Printf("err: %v\n", err)
-		return err
-	}
-
-	// Sets sane defaults
-	f.w.Header().Set("Content-Type", "application/json")
-
-	// Sets the passed options, which must be set between the Content-Type assignment and f.w.WriteHeader().
-	// Otherwhise it's not possible to change the Content-Type header using the below options.
-	for _, opt := range f.opts {
-		opt(f.w)
-	}
-
-	// Sets sane defaults
-	f.w.WriteHeader(httpStatusCodeFrom(f.st))
-
-	f.w.Write(json)
-
-	return nil
-}
-
-func httpStatusCodeFrom(st *status.Status) int {
-	switch st.Code() {
-	case codes.Aborted, codes.AlreadyExists:
-		return http.StatusConflict
-	case codes.DataLoss, codes.Unknown, codes.Internal:
-		return http.StatusInternalServerError
-	case codes.InvalidArgument, codes.FailedPrecondition, codes.OutOfRange:
-		return http.StatusBadRequest
-	case codes.Unauthenticated:
-		return http.StatusUnauthorized
-	case codes.PermissionDenied:
-		return http.StatusForbidden
-	case codes.NotFound:
-		return http.StatusNotFound
-	case codes.ResourceExhausted:
-		return http.StatusTooManyRequests
-	case codes.Canceled:
-		return 499
-	case codes.Unimplemented:
-		return http.StatusNotImplemented
-	case codes.Unavailable:
-		return http.StatusServiceUnavailable
-	case codes.DeadlineExceeded:
-		return http.StatusGatewayTimeout
-	}
-
-	// This error code should never be returned
-	return http.StatusUnprocessableEntity
-}
-
-func HttpResponseWriterFrom(w http.ResponseWriter, opts ...ResponseWriterOption) func(*status.Status) *httpResponseFormatter {
-	return func(st *status.Status) *httpResponseFormatter {
-		return &httpResponseFormatter{
-			st:   st,
-			w:    w,
-			opts: opts,
-		}
-	}
-}
 
 func AddDebugInfo(gRPCErr *status.Status, debugInfo *errdetails.DebugInfo) (*status.Status, error) {
 	return gRPCErr.WithDetails(debugInfo)
@@ -155,19 +79,6 @@ func newGRPCErrorWithBadRequestDetails(code codes.Code, errMsg string, fieldViol
 
 	return st.WithDetails(&badRequestDetails)
 }
-
-type ResponseWriterOption func(w http.ResponseWriter)
-
-/*
-func jsonFromGrpcStatus(status *status.Status) (string, error) {
-	data, err := jsonBytesFromGrpcStatus(status)
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
-}
-*/
 
 func jsonBytesFromGrpcStatus(status *status.Status) ([]byte, error) {
 	data, err := protojson.Marshal(status.Proto())
