@@ -1,11 +1,6 @@
 package grpcerr
 
 import (
-	"bytes"
-	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/tobbstr/testa/assert"
@@ -13,424 +8,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-type responseWriterMock struct {
-	bytes.Buffer
-}
-
-func (m *responseWriterMock) WriteHeader(statusCode int) {
-
-}
-
-func (m *responseWriterMock) Header() http.Header {
-	return http.Header{}
-}
-
-func TestHttpResponseFormatterAsJSON(t *testing.T) {
-	errorInfo := &errdetails.ErrorInfo{
-		Reason: "dummy-reason",
-		Domain: "dummy-domain",
-		Metadata: map[string]string{
-			"dummy-key": "dummy-value",
-		},
-	}
-	resourceInfo := &errdetails.ResourceInfo{
-		ResourceType: "dummy-resource-type",
-		ResourceName: "dummy-resource-name",
-		Owner:        "dummy-owner",
-		Description:  "dummy-description",
-	}
-	debugInfo := &errdetails.DebugInfo{
-		StackEntries: []string{"dummy-stack-entry"},
-		Detail:       "dummy-detail",
-	}
-	invalidArgument, err := NewInvalidArgument("dummy-msg", []*errdetails.BadRequest_FieldViolation{{Field: "dummy-field-violation-field", Description: "dummy-field-violation-desc"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	failedPrecondition, err := NewFailedPrecondition("dummy-msg", []*errdetails.PreconditionFailure_Violation{{Type: "dummy-failed-precondition-violation-type", Subject: "dummy-failed-precondition-violation-subject", Description: "dummy-failed-precondition-violation-desc"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	outOfRange, err := NewOutOfRange("dummy-msg", []*errdetails.BadRequest_FieldViolation{{Field: "dummy-field-violation-field", Description: "dummy-field-violation-desc"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	unathenticated, err := NewUnauthenticated("dummy-msg", errorInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	permissionDenied, err := NewPermissionDenied("dummy-msg", errorInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	notFound, err := NewNotFound("dummy-msg", resourceInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	aborted, err := NewAborted("dummy-msg", errorInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	alreadyExists, err := NewAlreadyExists("dummy-msg", resourceInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resourceExhausted, err := NewResourceExhausted("dummy-msg", []*errdetails.QuotaFailure_Violation{
-		{Subject: "dummy-subject", Description: "dummy-description"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cancelled, err := NewCancelled("dummy-msg")
-	if err != nil {
-		t.Fatal(err)
-	}
-	dataLoss, err := NewDataLoss("dummy-msg", debugInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	unknown, err := NewUnknown("dummy-msg", debugInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	internal, err := NewInternal("dummy-msg", debugInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	unimplemented, err := NewUnimplemented("dummy-msg")
-	if err != nil {
-		t.Fatal(err)
-	}
-	unavailable, err := NewUnavailable("dummy-msg", debugInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	deadlineExceeded, err := NewDeadlineExceeded("dummy-msg", debugInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	type args struct {
-		w    *httptest.ResponseRecorder
-		opts []ResponseWriterOption
-		st   *status.Status
-	}
-	testCases := []struct {
-		name               string
-		args               args
-		gotResponseWriter  *httptest.ResponseRecorder
-		gotGRPCErr         *status.Status
-		wantErr            error
-		wantHttpStatusCode int
-		wantHttpBody       string
-	}{
-		{
-			name: "Should err when get nil gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   nil,
-			},
-			wantErr:            fmt.Errorf("invalid argument: status was nil"),
-			wantHttpStatusCode: http.StatusBadRequest,
-			wantHttpBody:       ``,
-		},
-		{
-			name: "Should write correct HTTP response when get InvalidArgument gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   invalidArgument,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusBadRequest,
-			wantHttpBody:       `{"code":3, "message":"dummy-msg", "details":[{"@type":"type.googleapis.com/google.rpc.BadRequest", "fieldViolations":[{"field":"dummy-field-violation-field", "description":"dummy-field-violation-desc"}]}]}`,
-		},
-		{
-			name: "Should write correct HTTP response when get FailedPrecondition gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   failedPrecondition,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusBadRequest,
-			wantHttpBody:       "{\"code\":9, \"message\":\"dummy-msg\", \"details\":[{\"@type\":\"type.googleapis.com/google.rpc.PreconditionFailure\", \"violations\":[{\"type\":\"dummy-failed-precondition-violation-type\", \"subject\":\"dummy-failed-precondition-violation-subject\", \"description\":\"dummy-failed-precondition-violation-desc\"}]}]}",
-		},
-		{
-			name: "Should write correct HTTP response when get OutOfRange gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   outOfRange,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusBadRequest,
-			wantHttpBody:       "{\"code\":11, \"message\":\"dummy-msg\", \"details\":[{\"@type\":\"type.googleapis.com/google.rpc.BadRequest\", \"fieldViolations\":[{\"field\":\"dummy-field-violation-field\", \"description\":\"dummy-field-violation-desc\"}]}]}",
-		},
-		{
-			name: "Should write correct HTTP response when get Unauthenticated gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   unathenticated,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusUnauthorized,
-			wantHttpBody:       "{\"code\":16, \"message\":\"dummy-msg\", \"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\", \"reason\":\"dummy-reason\", \"domain\":\"dummy-domain\", \"metadata\":{\"dummy-key\":\"dummy-value\"}}]}",
-		},
-		{
-			name: "Should write correct HTTP response when get PermissionDenied gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   permissionDenied,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusForbidden,
-			wantHttpBody:       "{\"code\":7, \"message\":\"dummy-msg\", \"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\", \"reason\":\"dummy-reason\", \"domain\":\"dummy-domain\", \"metadata\":{\"dummy-key\":\"dummy-value\"}}]}",
-		},
-		{
-			name: "Should write correct HTTP response when get NotFound gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   notFound,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusNotFound,
-			wantHttpBody:       `{"code":5, "message":"dummy-msg", "details":[{"@type":"type.googleapis.com/google.rpc.ResourceInfo", "resourceType":"dummy-resource-type", "resourceName":"dummy-resource-name", "owner":"dummy-owner", "description":"dummy-description"}]}`,
-		},
-		{
-			name: "Should write correct HTTP response when get Aborted gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   aborted,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusConflict,
-			wantHttpBody:       "{\"code\":10, \"message\":\"dummy-msg\", \"details\":[{\"@type\":\"type.googleapis.com/google.rpc.ErrorInfo\", \"reason\":\"dummy-reason\", \"domain\":\"dummy-domain\", \"metadata\":{\"dummy-key\":\"dummy-value\"}}]}",
-		},
-		{
-			name: "Should write correct HTTP response when get AlreadyExists gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   alreadyExists,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusConflict,
-			wantHttpBody:       `{"code":6,"message":"dummy-msg","details":[{"@type":"type.googleapis.com/google.rpc.ResourceInfo","resourceType":"dummy-resource-type","resourceName":"dummy-resource-name","owner":"dummy-owner","description":"dummy-description"}]}`,
-		},
-		{
-			name: "Should write correct HTTP response when get ResourceExhausted gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   resourceExhausted,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusTooManyRequests,
-			wantHttpBody:       `{"code":8,"message":"dummy-msg","details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"subject":"dummy-subject","description":"dummy-description"}]}]}`,
-		},
-		{
-			name: "Should write correct HTTP response when get Cancelled gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   cancelled,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: 499,
-			wantHttpBody:       `{"code": 1, "message": "dummy-msg"}`,
-		},
-		{
-			name: "Should write correct HTTP response when get DataLoss gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   dataLoss,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusInternalServerError,
-			wantHttpBody:       `{"code":15, "message":"dummy-msg", "details":[{"@type":"type.googleapis.com/google.rpc.DebugInfo", "stackEntries":["dummy-stack-entry"], "detail":"dummy-detail"}]}`,
-		},
-		{
-			name: "Should write correct HTTP response when get Unknown gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   unknown,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusInternalServerError,
-			wantHttpBody:       `{"code":2, "message":"dummy-msg", "details":[{"@type":"type.googleapis.com/google.rpc.DebugInfo", "stackEntries":["dummy-stack-entry"], "detail":"dummy-detail"}]}`,
-		},
-		{
-			name: "Should write correct HTTP response when get Internal gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   internal,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusInternalServerError,
-			wantHttpBody:       `{"code":13, "message":"dummy-msg", "details":[{"@type":"type.googleapis.com/google.rpc.DebugInfo", "stackEntries":["dummy-stack-entry"], "detail":"dummy-detail"}]}`,
-		},
-		{
-			name: "Should write correct HTTP response when get Unimplemented gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   unimplemented,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusNotImplemented,
-			wantHttpBody:       `{"code":12, "message":"dummy-msg"}`,
-		},
-		{
-			name: "Should write correct HTTP response when get Unavailable gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   unavailable,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusServiceUnavailable,
-			wantHttpBody:       `{"code":14, "message":"dummy-msg", "details":[{"@type":"type.googleapis.com/google.rpc.DebugInfo", "stackEntries":["dummy-stack-entry"], "detail":"dummy-detail"}]}`,
-		},
-		{
-			name: "Should write correct HTTP response when get DeadlineExceeded gRPC error",
-			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   deadlineExceeded,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusGatewayTimeout,
-			wantHttpBody:       `{"code":4, "message":"dummy-msg", "details":[{"@type":"type.googleapis.com/google.rpc.DebugInfo", "stackEntries":["dummy-stack-entry"], "detail":"dummy-detail"}]}`,
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			// Given
-			require := assert.NewFatal(t)
-			write := HttpResponseWriterFrom(tc.args.w)
-
-			// When
-			gotErr := write(tc.args.st).AsJSON()
-
-			// Then
-			require(gotErr).Equals(tc.wantErr)
-			if gotErr != nil {
-				return
-			}
-
-			got := tc.args.w.Result()
-
-			require(got.StatusCode).Equals(tc.wantHttpStatusCode)
-
-			require(got.Header.Get("Content-Type")).Equals("application/json")
-
-			defer got.Body.Close()
-			gotHttpBody, err := ioutil.ReadAll(got.Body)
-			if err != nil {
-				t.Fatalf("could not read result body: %v\n", err)
-			}
-
-			require(string(gotHttpBody)).IsJSONEqualTo(tc.wantHttpBody)
-		})
-	}
-}
-
-func TestHttpResponseFormatterWithOptionAsJSON(t *testing.T) {
-	unimplemented, err := NewUnimplemented("dummy-msg")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	type args struct {
-		w    *httptest.ResponseRecorder
-		opts []ResponseWriterOption
-		st   *status.Status
-	}
-	testCases := []struct {
-		name               string
-		args               args
-		gotResponseWriter  *httptest.ResponseRecorder
-		gotGRPCErr         *status.Status
-		gotCustomOption    func(http.ResponseWriter)
-		wantErr            error
-		wantHttpStatusCode int
-		wantHttpBody       string
-		wantCustomHeader   string
-	}{
-		{
-			name: "Should err when get nil gRPC error and custom option",
-			args: args{
-				w: httptest.NewRecorder(),
-				opts: []ResponseWriterOption{
-					func(w http.ResponseWriter) { w.WriteHeader(http.StatusOK) },
-				},
-				st: nil,
-			},
-			wantErr:            fmt.Errorf("invalid argument: status was nil"),
-			wantHttpStatusCode: http.StatusOK,
-			wantHttpBody:       ``,
-		},
-		{
-			name: "Should write correct HTTP response for custom content-type",
-			args: args{
-				w: httptest.NewRecorder(),
-				opts: []ResponseWriterOption{
-					func(w http.ResponseWriter) { w.Header().Set("Content-Type", "dummy-content-type-value") },
-				},
-				st: unimplemented,
-			},
-			wantErr:            nil,
-			wantHttpStatusCode: http.StatusNotImplemented,
-			wantHttpBody:       `{"code":12, "message":"dummy-msg"}`,
-			wantCustomHeader:   "dummy-content-type-value",
-		},
-	}
-
-	// t.Parallel()
-	for _, tc := range testCases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			// Given
-			require := assert.NewFatal(t)
-			write := HttpResponseWriterFrom(tc.args.w, tc.args.opts...)
-
-			// When
-			gotErr := write(tc.args.st).AsJSON()
-
-			// Then
-			require(gotErr).Equals(tc.wantErr)
-			if gotErr != nil {
-				return
-			}
-
-			got := tc.args.w.Result()
-
-			require(got.StatusCode).Equals(tc.wantHttpStatusCode)
-
-			require(got.Header.Get("Content-Type")).Equals(tc.wantCustomHeader)
-
-			defer got.Body.Close()
-			gotHttpBody, err := ioutil.ReadAll(got.Body)
-			if err != nil {
-				t.Fatalf("could not read result body: %v\n", err)
-			}
-
-			require(string(gotHttpBody)).IsJSONEqualTo(tc.wantHttpBody)
-		})
-	}
-}
 
 func TestAddDebugInfo(t *testing.T) {
 	validGRPCErr, err := NewUnimplemented("dummy-err-msg")
@@ -477,24 +54,20 @@ func TestAddDebugInfo(t *testing.T) {
 				gRPCErr:   nil,
 				debugInfo: debugInfo,
 			},
-			want:    gRPCErrWithDebugInfo,
+			want:    nil,
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
 			assert := assert.New(t)
 
 			// When
 			got, err := AddDebugInfo(tt.args.gRPCErr, tt.args.debugInfo)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
+			assert(err).IsWantedError(tt.wantErr)
 			assert(got).Equals(tt.want)
 		})
 	}
@@ -543,49 +116,13 @@ func TestAddRequestInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
 			assert := assert.New(t)
 
 			// When
 			got, err := AddRequestInfo(tt.args.gRPCErr, tt.args.requestID, tt.args.servingData)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
-			assert(got).Equals(tt.want)
-		})
-	}
-}
-
-func Test_httpStatusCodeFrom(t *testing.T) {
-	type args struct {
-		st *status.Status
-	}
-	tests := []struct {
-		name string
-		args args
-		want int
-	}{
-		{
-			name: "should return StatusUnprocessableEntity when get gRPC error with illegal code",
-			args: args{
-				st: status.New(codes.Code(9999), "dummy-msg"),
-			},
-			want: http.StatusUnprocessableEntity,
-		},
-		// The rest of the status codes are tested by TestHttpResponseFormatterAsJSON
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Given
-			assert := assert.New(t)
-
-			// When
-			got := httpStatusCodeFrom(tt.args.st)
-
-			// Then
+			assert(err).IsWantedError(tt.wantErr)
 			assert(got).Equals(tt.want)
 		})
 	}
@@ -639,17 +176,14 @@ func TestAddHelp(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
+			assert := assert.New(t)
 
 			// When
 			got, err := AddHelp(tt.args.gRPCErr, tt.args.links)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
-			require(got).Equals(tt.want)
+			assert(err).IsWantedError(tt.wantErr)
+			assert(got).Equals(tt.want)
 		})
 	}
 }
@@ -697,17 +231,14 @@ func TestAddLocalizedMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
+			assert := assert.New(t)
 
 			// When
 			got, err := AddLocalizedMessage(tt.args.gRPCErr, tt.args.locale, tt.args.msg)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
-			require(got).Equals(tt.want)
+			assert(err).IsWantedError(tt.wantErr)
+			assert(got).Equals(tt.want)
 		})
 	}
 }
@@ -747,17 +278,14 @@ func TestNewInvalidArgument(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
+			assert := assert.New(t)
 
 			// When
 			got, err := NewInvalidArgument(tt.args.errMsg, tt.args.fieldViolations)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
-			require(got).Equals(tt.want)
+			assert(err).IsWantedError(tt.wantErr)
+			assert(got).Equals(tt.want)
 		})
 	}
 }
@@ -824,17 +352,14 @@ func Test_newGRPCErrorWithErrorInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
+			assert := assert.New(t)
 
 			// When
 			got, err := newGRPCErrorWithErrorInfo(tt.args.code, tt.args.errMsg, tt.args.errorInfo)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
-			require(got).Equals(tt.want)
+			assert(err).IsWantedError(tt.wantErr)
+			assert(got).Equals(tt.want)
 		})
 	}
 }
@@ -886,17 +411,14 @@ func Test_newGRPCErrorWithResourceInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
+			assert := assert.New(t)
 
 			// When
 			got, err := newGRPCErrorWithResourceInfo(tt.args.code, tt.args.errMsg, tt.args.resourceInfo)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
-			require(got).Equals(tt.want)
+			assert(err).IsWantedError(tt.wantErr)
+			assert(got).Equals(tt.want)
 		})
 	}
 }
@@ -993,17 +515,14 @@ func Test_newGRPCErrorWithDebugInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
+			assert := assert.New(t)
 
 			// When
 			got, err := newGRPCErrorWithDebugInfo(tt.args.code, tt.args.errMsg, tt.args.debugInfo)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
-			require(got).Equals(tt.want)
+			assert(err).IsWantedError(tt.wantErr)
+			assert(got).Equals(tt.want)
 		})
 	}
 }
@@ -1046,17 +565,14 @@ func Test_newGRPCErrorWithQuotaFailure(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
-			require := assert.NewFatal(t)
+			assert := assert.New(t)
 
 			// When
 			got, err := newGRPCErrorWithQuotaFailure(tt.args.code, tt.args.errMsg, tt.args.violations)
 
 			// Then
-			require((err != nil)).Equals(tt.wantErr)
-			if err != nil {
-				return
-			}
-			require(got).Equals(tt.want)
+			assert(err).IsWantedError(tt.wantErr)
+			assert(got).Equals(tt.want)
 		})
 	}
 }
