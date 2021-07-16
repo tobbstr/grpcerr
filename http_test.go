@@ -409,10 +409,10 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Given
 			assert := assert.New(t)
-			write := HttpResponseWriterFrom(tt.args.w, tt.args.opts...)
+			encodeAndWrite := NewHttpResponseEncodeWriter(tt.args.w, tt.args.opts...)
 
 			// When
-			gotErr := write(tt.args.st).AsJSON()
+			gotErr := encodeAndWrite(tt.args.st).AsJSON()
 			got := tt.args.w.Result()
 
 			// Then

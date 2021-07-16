@@ -8,15 +8,19 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// ResponseWriterOption is an option function used to modify its http.ResponseWriter argument.
+// For example, to set additional header values or to modify existing ones.
 type ResponseWriterOption func(w http.ResponseWriter)
 
-type httpResponseFormatter struct {
+type httpResponseEncoder struct {
 	st   *status.Status
 	w    http.ResponseWriter
 	opts []ResponseWriterOption
 }
 
-func (f *httpResponseFormatter) AsJSON() error {
+// AsJSON encodes the gRPC error as JSON and writes it to the http.ResponseWriter.
+// If an error occurs it is returned, otherwise it returns nil.
+func (f *httpResponseEncoder) AsJSON() error {
 	if f.st == nil {
 		f.w.WriteHeader(http.StatusInternalServerError)
 		f.w.Write(nil)
@@ -46,9 +50,11 @@ func (f *httpResponseFormatter) AsJSON() error {
 	return nil
 }
 
-func HttpResponseWriterFrom(w http.ResponseWriter, opts ...ResponseWriterOption) func(*status.Status) *httpResponseFormatter {
-	return func(st *status.Status) *httpResponseFormatter {
-		return &httpResponseFormatter{
+// NewHttpResponseEncodeWriter returns a function which is used to write a gRPC error to a http.ResponseWriter
+// using an encoding such as JSON.
+func NewHttpResponseEncodeWriter(w http.ResponseWriter, opts ...ResponseWriterOption) func(*status.Status) *httpResponseEncoder {
+	return func(st *status.Status) *httpResponseEncoder {
+		return &httpResponseEncoder{
 			st:   st,
 			w:    w,
 			opts: opts,
