@@ -3,7 +3,7 @@
 This library enables API developers to use the gRPC error model for both gRPC and HTTP.
 It provides an easy to use API for instantiating gRPC errors such as Unavailable, Resource Exhausted, Invalid argument etc,
 in addition to easily adding metadata such as a request ID, stack traces and more. It also facilitates encoding and writing of
-gRPC errors to a http.ResponseWriter. As of now, it only supports JSON-encoding.
+gRPC errors to an http.ResponseWriter. As of now, it only supports JSON-encoding.
 
 # Getting Started
 
@@ -31,7 +31,7 @@ import (
 
 func main() {
     // Error details
-    errInfo := &errdetails.ErrorInfo{
+    errInfo := &grpcerr.ErrorInfo{
         Reason: "Token expired",
         Domain: "Authorization",
         Metadata: map[string]string{
@@ -44,34 +44,6 @@ func main() {
     if err != nil {
         // handle error
     }
-}
-```
-
-## Converting gRPC errors to error
-
-```go
-import (
-    "github.com/tobbstr/grpcerr"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-)
-
-func main() {
-    // Converting a gRPC error to an error
-    err := grpcerr.ToError(permissionDenied)
-}
-```
-
-## Converting errors to gRPC errors
-
-```go
-import (
-    "github.com/tobbstr/grpcerr"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-)
-
-func main() {
-    // Converting an error to a gRPC error
-    gRPCErr := grpcerr.FromError(err)
 }
 ```
 
@@ -89,8 +61,9 @@ import (
 func (c *controller) awesomeEndpoint(w http.ResponseWriter, r *http.Request) {
     // ... Do bunch of stuff ...
 
-    // Handle errors returned from an invocation
     err = vitalFunc(...)
+    // Handles errors returned from an invocation.
+    // Note! err must be a gRPC error instantiated using this library
     if err != nil {
         encodeAndWrite := grpcerr.NewHttpResponseEncodeWriter(w)
         if err = encodeAndWrite(err).AsJSON(); err != nil {
@@ -100,6 +73,128 @@ func (c *controller) awesomeEndpoint(w http.ResponseWriter, r *http.Request) {
     }
 
     // Continue normal processing...
+}
+```
+
+This is an example of a HTTP Response Body for an InvalidArgument gRPC error:
+
+```json
+{
+    "code":3,
+    "message":"dummy-msg",
+    "details":[
+        {
+            "@type":"type.googleapis.com/google.rpc.BadRequest",
+            "fieldViolations":[
+                {
+                    "field":"dummy-field-violation-field",
+                    "description":"dummy-field-violation-desc"
+                }
+            ]
+        }
+    ]
+}
+```
+
+In terms of HTTP headers the HTTP status code is translated from the gRPC error code, but is overridable using
+options when calling `grpcerr.NewHttpRresponseEncodeWriter(w, opts...)`. The below is an example of this:
+
+```go
+// defining the override
+withStatusOK := func(w http.ResponseWriter) {
+    w.WriteHeader(http.StatusOK)
+}
+
+// use the option like this
+encodeAndWrite := NewHttpResponseEncodeWriter(w, withStatusOK)
+```
+
+## Wrapping of errors are supported
+
+```go
+// Somewhere in a service far, far away...
+func (svc *service) OrchestrateImportantAction() error {
+    // Something goes awry
+    if err != nil {
+        violations := []grpcerr.PreconditionFailure{
+            {
+                Type: "Account missing",
+                Subject: "john.doe@example.com",
+                Description: "Callers must supply account information in request",
+            },
+        }
+
+        failedPrecondition, err := grpcerr.NewFailedPrecondition("", violations)
+        if err != nil {
+            // handle error
+        }
+
+        // Note! The returned error is a wrapped one, having the gRPC error as its root error. It does not matter how many times the gRPC error gets wrapped, as long as it's the root error.
+        return fmt.Errorf("could not perform something cool: %w", failedPrecondition)
+    }
+}
+
+// Meanwhile in an HTTP controller not that far away
+func (c *controller) performImportantAction(w http.ResponseWriter, r *http.Request) {
+    // invoke svc, which returns a wrapped gRPC error instantiated using this library
+    err := c.svc.OrchestrateImportantAction()
+    if err != nil {
+        // ... Log the error ...
+
+        // write an HTTP response from the root error which is the gRPC error
+        encodeAndWrite := grpcerr.NewHttpResponseEncodeWriter(w)
+        if err = encodeAndWrite(err).AsJSON(); err != nil {
+            // handle error
+        }
+        return
+    }
+}
+```
+
+## Using gRPC errors in gRPC APIs
+
+```go
+func (c *gRPCController) AwesomeEndpoint(ctx context.Context, req *AwesomeRequest) (*AwesomeResponse, error) {
+    err := c.svc.OrchestrateImportantAction()
+    if err != nil {
+        // ... Log the error ...
+
+        // no additional processing required, return the error as is
+        return nil, err
+    }
+}
+```
+
+## Using gRPC errors in gRPC clients
+
+```go
+response, err := client.AwesomeEndpoint(...)
+if err != nil {
+    // gets the gRPC code
+    code := grpcerr.Code(err)
+
+    // gets the gRPC message
+    message := grpcerr.Message(err)
+
+    // gets the RequestInfo from the gRPC error
+    requestInfo := grpcerr.RequestInfoFrom(err)
+
+    // gets the DebugInfo from the gRPC error
+    debugInfo := grpcerr.DebugInfoFrom(err)
+
+    // gets the HelpLinks from the gRPC error
+    helpLinks := grpcerr.HelpLinksFrom(err)
+
+    // gets the LocalizedMessage from the gRPC error
+    localizedMessage := grpcerr.LocalizedMessageFrom(err)
+
+    // gets the QuotaViolations from the gRPC error
+    quotaViolations := grpcerr.QuotaViolationsFrom(err)
+
+    // gets the FieldViolations from the gRPC error
+    fieldViolations := grpcerr.FieldViolationsFrom(err)
+
+    // etc ...
 }
 ```
 

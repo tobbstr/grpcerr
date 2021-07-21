@@ -10,38 +10,37 @@ import (
 	"testing"
 
 	"github.com/tobbstr/testa/assert"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func TestHttpResponseFormatterAsJSON(t *testing.T) {
-	errorInfo := &errdetails.ErrorInfo{
+func TestHttpResponseEncodeWriteAsJSON(t *testing.T) {
+	errorInfo := &ErrorInfo{
 		Reason: "dummy-reason",
 		Domain: "dummy-domain",
 		Metadata: map[string]string{
 			"dummy-key": "dummy-value",
 		},
 	}
-	resourceInfo := &errdetails.ResourceInfo{
+	resourceInfo := &ResourceInfo{
 		ResourceType: "dummy-resource-type",
 		ResourceName: "dummy-resource-name",
 		Owner:        "dummy-owner",
 		Description:  "dummy-description",
 	}
-	debugInfo := &errdetails.DebugInfo{
+	debugInfo := &DebugInfo{
 		StackEntries: []string{"dummy-stack-entry"},
 		Detail:       "dummy-detail",
 	}
-	invalidArgument, err := NewInvalidArgument("dummy-msg", []*errdetails.BadRequest_FieldViolation{{Field: "dummy-field-violation-field", Description: "dummy-field-violation-desc"}})
+	invalidArgument, err := NewInvalidArgument("dummy-msg", []FieldViolation{{Field: "dummy-field-violation-field", Description: "dummy-field-violation-desc"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	failedPrecondition, err := NewFailedPrecondition("dummy-msg", []*errdetails.PreconditionFailure_Violation{{Type: "dummy-failed-precondition-violation-type", Subject: "dummy-failed-precondition-violation-subject", Description: "dummy-failed-precondition-violation-desc"}})
+	failedPrecondition, err := NewFailedPrecondition("dummy-msg", []PreconditionFailure{{Type: "dummy-failed-precondition-violation-type", Subject: "dummy-failed-precondition-violation-subject", Description: "dummy-failed-precondition-violation-desc"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	outOfRange, err := NewOutOfRange("dummy-msg", []*errdetails.BadRequest_FieldViolation{{Field: "dummy-field-violation-field", Description: "dummy-field-violation-desc"}})
+	outOfRange, err := NewOutOfRange("dummy-msg", []FieldViolation{{Field: "dummy-field-violation-field", Description: "dummy-field-violation-desc"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,16 +64,14 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resourceExhausted, err := NewResourceExhausted("dummy-msg", []*errdetails.QuotaFailure_Violation{
+	resourceExhausted, err := NewResourceExhausted("dummy-msg", []QuotaViolation{
 		{Subject: "dummy-subject", Description: "dummy-description"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cancelled, err := NewCancelled("dummy-msg")
-	if err != nil {
-		t.Fatal(err)
-	}
+	cancelled := NewCancelled("dummy-msg")
+
 	dataLoss, err := NewDataLoss("dummy-msg", debugInfo)
 	if err != nil {
 		t.Fatal(err)
@@ -87,10 +84,8 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unimplemented, err := NewUnimplemented("dummy-msg")
-	if err != nil {
-		t.Fatal(err)
-	}
+	unimplemented := NewUnimplemented("dummy-msg")
+
 	unavailable, err := NewUnavailable("dummy-msg", debugInfo)
 	if err != nil {
 		t.Fatal(err)
@@ -101,9 +96,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 	}
 
 	type args struct {
-		w    *httptest.ResponseRecorder
-		opts []ResponseWriterOption
-		st   *status.Status
+		w       *httptest.ResponseRecorder
+		opts    []ResponseWriterOption
+		gRPCErr error
 	}
 	tests := []struct {
 		name    string
@@ -114,9 +109,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should err when get nil gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   nil,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: nil,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusInternalServerError,
@@ -125,14 +120,14 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 					"Content-Type": {""},
 				},
 			},
-			wantErr: fmt.Errorf("invalid argument: status was nil"),
+			wantErr: fmt.Errorf("invalid argument: gRPCErr was nil"),
 		},
 		{
 			name: "Should write correct HTTP response when get InvalidArgument gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   invalidArgument,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: invalidArgument,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusBadRequest,
@@ -146,9 +141,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get FailedPrecondition gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   failedPrecondition,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: failedPrecondition,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusBadRequest,
@@ -162,9 +157,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get OutOfRange gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   outOfRange,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: outOfRange,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusBadRequest,
@@ -178,9 +173,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get Unauthenticated gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   unathenticated,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: unathenticated,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusUnauthorized,
@@ -194,9 +189,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get PermissionDenied gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   permissionDenied,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: permissionDenied,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusForbidden,
@@ -210,9 +205,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get NotFound gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   notFound,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: notFound,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusNotFound,
@@ -226,9 +221,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get Aborted gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   aborted,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: aborted,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusConflict,
@@ -242,9 +237,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get AlreadyExists gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   alreadyExists,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: alreadyExists,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusConflict,
@@ -258,9 +253,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get ResourceExhausted gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   resourceExhausted,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: resourceExhausted,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusTooManyRequests,
@@ -274,9 +269,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get Cancelled gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   cancelled,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: cancelled,
 			},
 			want: &http.Response{
 				StatusCode: 499,
@@ -290,9 +285,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get DataLoss gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   dataLoss,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: dataLoss,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusInternalServerError,
@@ -306,9 +301,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get Unknown gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   unknown,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: unknown,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusInternalServerError,
@@ -322,9 +317,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get Internal gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   internal,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: internal,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusInternalServerError,
@@ -338,9 +333,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get Unimplemented gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   unimplemented,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: unimplemented,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusNotImplemented,
@@ -354,9 +349,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get Unavailable gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   unavailable,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: unavailable,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusServiceUnavailable,
@@ -370,9 +365,9 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 		{
 			name: "Should write correct HTTP response when get DeadlineExceeded gRPC error",
 			args: args{
-				w:    httptest.NewRecorder(),
-				opts: nil,
-				st:   deadlineExceeded,
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: deadlineExceeded,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusGatewayTimeout,
@@ -391,13 +386,43 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 					func(w http.ResponseWriter) { w.Header().Set("Content-Type", "dummy-content-type-value") },
 					func(w http.ResponseWriter) { w.WriteHeader(http.StatusOK) },
 				},
-				st: unathenticated,
+				gRPCErr: unathenticated,
 			},
 			want: &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(`{"code":16,"message":"dummy-msg","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"dummy-reason","domain":"dummy-domain","metadata":{"dummy-key":"dummy-value"}}]}`)),
 				Header: map[string][]string{
 					"Content-Type": {"dummy-content-type-value"},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "Should return error when gRPCErr does not have GRPCStatus() method",
+			args: args{
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: fmt.Errorf("dummy-error-that-does-not-have-grpcstatus-method"),
+			},
+			want: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(strings.NewReader("")),
+				Header:     map[string][]string{},
+			},
+			wantErr: fmt.Errorf("invalid argument: gRPCErr's root error must have the GRPCStatus() method"),
+		},
+		{
+			name: "Should write correct HTTP response when gRPCErr is wrapped error",
+			args: args{
+				w:       httptest.NewRecorder(),
+				opts:    nil,
+				gRPCErr: fmt.Errorf("dummy-wrapping-error: %w", unimplemented),
+			},
+			want: &http.Response{
+				StatusCode: http.StatusNotImplemented,
+				Body:       io.NopCloser(strings.NewReader(`{"code":12, "message":"dummy-msg"}`)),
+				Header: map[string][]string{
+					"Content-Type": {"application/json"},
 				},
 			},
 			wantErr: nil,
@@ -412,7 +437,7 @@ func TestHttpResponseFormatterAsJSON(t *testing.T) {
 			encodeAndWrite := NewHttpResponseEncodeWriter(tt.args.w, tt.args.opts...)
 
 			// When
-			gotErr := encodeAndWrite(tt.args.st).AsJSON()
+			gotErr := encodeAndWrite(tt.args.gRPCErr).AsJSON()
 			got := tt.args.w.Result()
 
 			// Then
