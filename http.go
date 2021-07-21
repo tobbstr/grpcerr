@@ -1,6 +1,7 @@
 package grpcerr
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -13,20 +14,31 @@ import (
 type ResponseWriterOption func(w http.ResponseWriter)
 
 type httpResponseEncoder struct {
-	st   *status.Status
-	w    http.ResponseWriter
-	opts []ResponseWriterOption
+	gRPCErr error
+	w       http.ResponseWriter
+	opts    []ResponseWriterOption
 }
 
 // AsJSON encodes the gRPC error as JSON and writes it to the http.ResponseWriter.
 // If an error occurs it is returned, otherwise it returns nil.
 func (f *httpResponseEncoder) AsJSON() error {
-	if f.st == nil {
+	if f.gRPCErr == nil {
 		f.w.WriteHeader(http.StatusInternalServerError)
 		f.w.Write(nil)
-		return fmt.Errorf("invalid argument: status was nil")
+		return fmt.Errorf("invalid argument: gRPCErr was nil")
 	}
-	json, err := jsonBytesFromGrpcStatus(f.st)
+
+	rootErr := rootError(f.gRPCErr)
+	statusErr, ok := rootErr.(interface{ GRPCStatus() *status.Status })
+	if !ok {
+		f.w.WriteHeader(http.StatusInternalServerError)
+		f.w.Write(nil)
+		return fmt.Errorf("invalid argument: gRPCErr's root error must have the GRPCStatus() method")
+	}
+
+	st := statusErr.GRPCStatus()
+
+	json, err := jsonBytesFromGrpcStatus(st)
 	if err != nil {
 		f.w.WriteHeader(http.StatusInternalServerError)
 		f.w.Write(nil)
@@ -43,7 +55,7 @@ func (f *httpResponseEncoder) AsJSON() error {
 	}
 
 	// Sets sane defaults
-	f.w.WriteHeader(httpStatusCodeFrom(f.st))
+	f.w.WriteHeader(httpStatusCodeFrom(st))
 
 	f.w.Write(json)
 
@@ -52,12 +64,12 @@ func (f *httpResponseEncoder) AsJSON() error {
 
 // NewHttpResponseEncodeWriter returns a function which is used to write a gRPC error to a http.ResponseWriter
 // using an encoding such as JSON.
-func NewHttpResponseEncodeWriter(w http.ResponseWriter, opts ...ResponseWriterOption) func(*status.Status) *httpResponseEncoder {
-	return func(st *status.Status) *httpResponseEncoder {
+func NewHttpResponseEncodeWriter(w http.ResponseWriter, opts ...ResponseWriterOption) func(error) *httpResponseEncoder {
+	return func(gRPCErr error) *httpResponseEncoder {
 		return &httpResponseEncoder{
-			st:   st,
-			w:    w,
-			opts: opts,
+			gRPCErr: gRPCErr,
+			w:       w,
+			opts:    opts,
 		}
 	}
 }
@@ -90,4 +102,14 @@ func httpStatusCodeFrom(st *status.Status) int {
 
 	// This error code should never be returned
 	return http.StatusInternalServerError
+}
+
+// rootError recursively unwraps errors until the root error is found and then returns it.
+func rootError(err error) error {
+	unwrappedErr := errors.Unwrap(err)
+	if unwrappedErr == nil {
+		return err
+	}
+
+	return rootError(unwrappedErr)
 }

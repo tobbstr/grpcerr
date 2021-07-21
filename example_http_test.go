@@ -6,16 +6,13 @@ import (
 	"net/http/httptest"
 )
 
-func ExampleHttpResponseEncodeWriter() {
+func ExampleNewHttpResponseEncodeWriter() {
 	w := httptest.NewRecorder()
-	encodeAndWrite := NewHttpResponseEncodeWriter(w, nil)
+	encodeAndWrite := NewHttpResponseEncodeWriter(w)
 
-	unimplementedGRPCError, err := NewUnimplemented("")
-	if err != nil {
-		panic(err)
-	}
+	unimplementedGRPCError := NewUnimplemented("")
 
-	if err = encodeAndWrite(unimplementedGRPCError).AsJSON(); err != nil {
+	if err := encodeAndWrite(unimplementedGRPCError).AsJSON(); err != nil {
 		panic(err)
 	}
 
@@ -26,6 +23,6 @@ func ExampleHttpResponseEncodeWriter() {
 		panic(err)
 	}
 
-	fmt.Printf("\nStatus code: %d\n", result.StatusCode)
-	fmt.Printf("Body:\n%s\n", string(httpResponseBody))
+	fmt.Printf("\nHTTP Status code: %d\n", result.StatusCode)
+	fmt.Printf("HTTP Body:\n%s\n", string(httpResponseBody))
 }
